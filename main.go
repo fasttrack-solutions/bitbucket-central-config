@@ -17,7 +17,7 @@ func main() {
 
 	client := resty.New()
 	client.SetDebug(true)
-
+	client.SetHeader("Content-Type", "application/json")
 	client.SetHostURL("https://api.bitbucket.org/2.0")
 	client.SetBasicAuth(username, password)
 
@@ -50,7 +50,7 @@ func main() {
 
 		reposResp := resp.Result().(*BitbucketRepositoriesResponse)
 
-		if reposResp.Size == 0 {
+		if len(reposResp.Values) == 0 {
 			break
 		}
 
@@ -74,11 +74,80 @@ func main() {
 			}
 			log.Printf("Added default reviewers for %s", r.Slug)
 		}
+
+		// Set Branching Model
+		body := `{
+			"branch_types": [
+			  {
+				"kind": "bugfix",
+				"enabled": true,
+				"prefix": "bugfix/"
+			  },
+			  {
+				"kind": "feature",
+				"enabled": true,
+				"prefix": "feature/"
+			  },
+			  {
+				"kind": "hotfix",
+				"enabled": true,
+				"prefix": "hotfix/"
+			  }
+			]
+		  }`
+
+		_, err = client.R().
+			SetBody(body).
+			Put(fmt.Sprintf("/repositories/%s/%s/branching-model/settings", workspace, r.Slug))
+
+		if err != nil {
+			log.Fatalf("Couldnt do request err: %v", err)
+		}
+
+		//Set Branch Restrictions
+		bodyRequriesApproves := `{
+			"kind": "require_approvals_to_merge",
+			"branch_match_kind": "branching_model",
+			"branch_type": "development",
+			"pattern": "",
+			"value": 2
+		  }`
+		_, err = client.R().
+			SetBody(bodyRequriesApproves).
+			Post(fmt.Sprintf("/repositories/%s/%s/branch-restrictions", workspace, r.Slug))
+
+		if err != nil {
+			log.Fatalf("Couldnt do request err: %v", err)
+		}
+
+		bodyResetApproves := `{
+			"kind": "reset_pullrequest_approvals_on_change",
+			"branch_match_kind": "branching_model",
+			"branch_type": "development",
+			"pattern": ""
+		  }`
+		_, err = client.R().
+			SetBody(bodyResetApproves).
+			Post(fmt.Sprintf("/repositories/%s/%s/branch-restrictions", workspace, r.Slug))
+
+		if err != nil {
+			log.Fatalf("Couldnt do request err: %v", err)
+		}
+
+		bodyPreventMergeWithUnresolved := `{
+			"kind": "enforce_merge_checks",
+			"branch_match_kind": "branching_model",
+			"branch_type": "development",
+			"pattern": ""
+		  }`
+		_, err = client.R().
+			SetBody(bodyPreventMergeWithUnresolved).
+			Post(fmt.Sprintf("/repositories/%s/%s/branch-restrictions", workspace, r.Slug))
+
+		if err != nil {
+			log.Fatalf("Couldnt do request err: %v", err)
+		}
 	}
-
-	// Set Branching Model
-
-	// Set Branch Restrictions
 
 }
 
