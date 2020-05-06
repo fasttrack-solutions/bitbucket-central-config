@@ -17,7 +17,6 @@ func main() {
 
 	client := resty.New()
 	client.SetDebug(true)
-	client.SetHeader("Content-Type", "application/json")
 	client.SetHostURL("https://api.bitbucket.org/2.0")
 	client.SetBasicAuth(username, password)
 
@@ -64,6 +63,23 @@ func main() {
 	// Set default reviewers
 
 	for _, r := range repos {
+
+		// resp, err = client.R().
+		// 	SetResult(&BitbucketRepositoriesResponse{}).
+		// 	Delete(fmt.Sprintf("/repositories/%s/%s/default-reviewers/%s", workspace, r.Slug, "{xxxx}"))
+
+		// if err != nil {
+		// 	log.Fatalf("Couldnt do request err: %v", err)
+		// }
+
+		// resp, err = client.R().
+		// 	SetResult(&BitbucketRepositoriesResponse{}).
+		// 	Delete(fmt.Sprintf("/repositories/%s/%s/default-reviewers/%s", workspace, r.Slug, "{xxxx}"))
+
+		// if err != nil {
+		// 	log.Fatalf("Couldnt do request err: %v", err)
+		// }
+
 		for _, m := range members.Values {
 			resp, err = client.R().
 				SetResult(&BitbucketRepositoriesResponse{}).
@@ -72,7 +88,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("Couldnt do request err: %v", err)
 			}
-			log.Printf("Added default reviewers for %s", r.Slug)
+			log.Printf("Added default reviewers for %s body %s", r.Slug, string(resp.Body()))
 		}
 
 		// Set Branching Model
@@ -98,6 +114,7 @@ func main() {
 
 		_, err = client.R().
 			SetBody(body).
+			SetHeader("Content-Type", "application/json").
 			Put(fmt.Sprintf("/repositories/%s/%s/branching-model/settings", workspace, r.Slug))
 
 		if err != nil {
@@ -113,6 +130,7 @@ func main() {
 			"value": 2
 		  }`
 		_, err = client.R().
+			SetHeader("Content-Type", "application/json").
 			SetBody(bodyRequriesApproves).
 			Post(fmt.Sprintf("/repositories/%s/%s/branch-restrictions", workspace, r.Slug))
 
@@ -128,6 +146,7 @@ func main() {
 		  }`
 		_, err = client.R().
 			SetBody(bodyResetApproves).
+			SetHeader("Content-Type", "application/json").
 			Post(fmt.Sprintf("/repositories/%s/%s/branch-restrictions", workspace, r.Slug))
 
 		if err != nil {
@@ -142,6 +161,7 @@ func main() {
 		  }`
 		_, err = client.R().
 			SetBody(bodyPreventMergeWithUnresolved).
+			SetHeader("Content-Type", "application/json").
 			Post(fmt.Sprintf("/repositories/%s/%s/branch-restrictions", workspace, r.Slug))
 
 		if err != nil {
