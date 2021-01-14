@@ -1,9 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -20,6 +22,19 @@ func main() {
 	client.SetHostURL("https://api.bitbucket.org/2.0")
 	client.SetBasicAuth(username, password)
 
+	deleteReviewers := ""
+	ignoreReviewers := ""
+
+	flag.StringVar(&deleteReviewers, "delete-reviewers", "", "to remove a user as default reviwer on all repos")
+	flag.StringVar(&ignoreReviewers, "ignore-reviewers", "", "exclude user from being added as default reviwer")
+
+	flag.Parse()
+
+	if len(deleteReviewers) > 0 {
+		deleteReviewersOnAllRepos(deleteReviewers, client, workspace)
+		return
+	}
+
 	// Getting members
 	resp, err := client.R().
 		SetResult(&BitbucketMembersResponse{}).
@@ -30,6 +45,8 @@ func main() {
 	}
 
 	members := resp.Result().(*BitbucketMembersResponse)
+
+	listIgnoreReviewers := strings.Split(ignoreReviewers, ",")
 
 	log.Print(len(members.Values))
 
@@ -81,6 +98,18 @@ func main() {
 		// }
 
 		for _, m := range members.Values {
+			ignore := false
+			for _, im := range listIgnoreReviewers {
+				if im == m.User.AccountID {
+					ignore = true
+				}
+			}
+
+			if ignore {
+				log.Printf("User was on ignore list %s", m.User.UUID)
+				continue
+			}
+
 			resp, err = client.R().
 				SetResult(&BitbucketRepositoriesResponse{}).
 				Put(fmt.Sprintf("/repositories/%s/%s/default-reviewers/%s", workspace, r.Slug, m.User.UUID))
@@ -169,6 +198,68 @@ func main() {
 		}
 	}
 
+}
+
+func deleteReviewersOnAllRepos(reviewersToDelete string, client *resty.Client, workspace string) {
+	listOfReviewersToDelete := strings.Split(reviewersToDelete, ",")
+
+	// Getting members
+	resp, err := client.R().
+		SetResult(&BitbucketMembersResponse{}).
+		Get(fmt.Sprintf("/workspaces/%s/members", workspace))
+
+	if err != nil {
+		log.Fatalf("Couldnt do request err: %v", err)
+	}
+
+	members := resp.Result().(*BitbucketMembersResponse)
+
+	log.Print(len(members.Values))
+
+	repos := []BitbucketRepository{}
+
+	page := 1
+	// Get repos
+	for {
+
+		resp, err = client.R().
+			SetResult(&BitbucketRepositoriesResponse{}).
+			Get(fmt.Sprintf("/repositories/%s?page=%d", workspace, page))
+
+		if err != nil {
+			log.Fatalf("Couldnt do request err: %v", err)
+		}
+
+		reposResp := resp.Result().(*BitbucketRepositoriesResponse)
+
+		if len(reposResp.Values) == 0 {
+			break
+		}
+
+		for _, r := range reposResp.Values {
+			repos = append(repos, r)
+		}
+
+		page++
+	}
+
+	for _, r := range repos {
+		for _, m := range members.Values {
+			for _, u := range listOfReviewersToDelete {
+				if u == m.User.AccountID {
+					resp, err = client.R().
+						SetResult(&BitbucketRepositoriesResponse{}).
+						Delete(fmt.Sprintf("/repositories/%s/%s/default-reviewers/%s", workspace, r.Slug, m.User.UUID))
+
+					if err != nil {
+						log.Fatalf("Couldnt do request err: %v", err)
+					}
+					log.Printf("Deleted default for user %s reviewers for %s body %s", m.User.Nickname, r.Slug, string(resp.Body()))
+					break
+				}
+			}
+		}
+	}
 }
 
 type BitbucketMembersResponse struct {
